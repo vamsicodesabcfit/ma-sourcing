@@ -4,6 +4,7 @@ from typing import Any, List, Optional, Tuple
 
 from src.constants import DEAL_SIZE_MAX_M_USD, DEAL_SIZE_MIN_M_USD
 from src.claude_client import complete_json
+from src.groq_client import complete_json_groq
 from src.criteria import (
     allowed_regions_instruction_line,
     criteria_prompt_block,
@@ -93,18 +94,17 @@ def parse_enrichment_pasted_json(text: str) -> List[EnrichedTarget]:
     return [enrich_from_dict(r) for r in rows if str(r.get("company_name", "")).strip()]
 
 
-def run_enrichment_anthropic(
+def build_enrichment_user_message(
     company_name: str,
-    website: Optional[str] = None,
-    extra_notes: Optional[str] = None,
-    regions: Optional[List[str]] = None,
-    deal_min_m: float = float(DEAL_SIZE_MIN_M_USD),
-    deal_max_m: float = float(DEAL_SIZE_MAX_M_USD),
-    use_tavily: bool = True,
+    website: Optional[str],
+    extra_notes: Optional[str],
+    regions: List[str],
+    deal_min_m: float,
+    deal_max_m: float,
+    use_tavily: bool,
     criteria_path: Optional[str] = None,
-) -> EnrichedTarget:
-    if regions is None:
-        regions = []
+) -> str:
+    """User message shared by Groq and Anthropic for a single-company enrichment call."""
     criteria = load_criteria(criteria_path)
     block = criteria_prompt_block(criteria)
     rb = regions_block(regions)
@@ -114,7 +114,7 @@ def run_enrichment_anthropic(
     rrel_inner = ", ".join(f'"{c}"' for c in codes)
     snippets = _tavily_for_company(company_name, regions, use_tavily)
 
-    user = f"""{block}
+    return f"""{block}
 {rb}
 {db}
 {allowed_line}
@@ -160,7 +160,44 @@ Return JSON for this single company (same schema as one element of enriched_targ
 }}
 """
 
+
+def run_enrichment_anthropic(
+    company_name: str,
+    website: Optional[str] = None,
+    extra_notes: Optional[str] = None,
+    regions: Optional[List[str]] = None,
+    deal_min_m: float = float(DEAL_SIZE_MIN_M_USD),
+    deal_max_m: float = float(DEAL_SIZE_MAX_M_USD),
+    use_tavily: bool = True,
+    criteria_path: Optional[str] = None,
+) -> EnrichedTarget:
+    if regions is None:
+        regions = []
+    user = build_enrichment_user_message(
+        company_name, website, extra_notes, regions, deal_min_m, deal_max_m, use_tavily, criteria_path
+    )
     data = complete_json(ENRICH_SYSTEM, user)
+    if not str(data.get("company_name", "")).strip():
+        data["company_name"] = company_name
+    return enrich_from_dict(data)
+
+
+def run_enrichment_groq(
+    company_name: str,
+    website: Optional[str] = None,
+    extra_notes: Optional[str] = None,
+    regions: Optional[List[str]] = None,
+    deal_min_m: float = float(DEAL_SIZE_MIN_M_USD),
+    deal_max_m: float = float(DEAL_SIZE_MAX_M_USD),
+    use_tavily: bool = True,
+    criteria_path: Optional[str] = None,
+) -> EnrichedTarget:
+    if regions is None:
+        regions = []
+    user = build_enrichment_user_message(
+        company_name, website, extra_notes, regions, deal_min_m, deal_max_m, use_tavily, criteria_path
+    )
+    data = complete_json_groq(ENRICH_SYSTEM, user)
     if not str(data.get("company_name", "")).strip():
         data["company_name"] = company_name
     return enrich_from_dict(data)
