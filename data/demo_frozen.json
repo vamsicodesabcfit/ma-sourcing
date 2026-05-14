@@ -1,0 +1,84 @@
+{
+  "discovery": {
+    "candidates": [
+      {
+        "company_name": "Life Time, Inc.",
+        "headquarters": "Chanhassen, MN, US",
+        "hq_or_primary_us_state": "MN",
+        "regions_relevant": ["US"],
+        "website": "https://www.lifetime.life",
+        "sub_sector": "boutique_fitness_operator",
+        "ownership_signal": "public",
+        "scale_signal": "large",
+        "fit_rationale": "Premium athletic country clubs; strategic overlap with club ecosystem.",
+        "risk_flags": ["Public — different process"],
+        "confidence_0_1": 0.72,
+        "suggested_next_step": "Map partnerships and tech stack.",
+        "estimated_ev_usd_millions_mid": null
+      },
+      {
+        "company_name": "Urban Sports Club",
+        "headquarters": "Berlin, Germany",
+        "hq_or_primary_us_state": null,
+        "regions_relevant": ["EU"],
+        "website": "https://urbansportsclub.com",
+        "sub_sector": "boutique_fitness_operator",
+        "ownership_signal": "pe-backed",
+        "scale_signal": "mid",
+        "fit_rationale": "Multi-studio membership aggregator in EU — rollup / partnership lens.",
+        "risk_flags": ["Cross-border integration"],
+        "confidence_0_1": 0.55,
+        "suggested_next_step": "Confirm latest ownership and US expansion if any.",
+        "estimated_ev_usd_millions_mid": 120
+      }
+    ],
+    "search_queries_suggested": [
+      "boutique fitness chains Europe PE",
+      "India gym tech SaaS funding"
+    ]
+  },
+  "enriched_rows": [
+    {
+      "company_name": "Mindbody",
+      "website": "https://www.mindbodyonline.com",
+      "sub_sector": "fitness_software",
+      "hq_us_state_or_region": "CA",
+      "headquarters": "San Luis Obispo, CA, US",
+      "regions_addressed": ["US", "EU"],
+      "employee_count": "1000+ (public estimates vary — NA exact)",
+      "last_financing_summary": "Acquired / take-private history — verify current owner",
+      "last_financing_date": "NA",
+      "revenue_note": "NA for private period — use licensed data for diligence",
+      "profitability_note": "NA",
+      "ceo_name": "NA",
+      "ceo_email": null,
+      "investors": ["Historical VC/PE — verify"],
+      "year_founded": 2001,
+      "ownership_signal": "unknown",
+      "scale_signal": "mid",
+      "b2b2c_distribution_relevant": 0.85,
+      "software_or_data_component": 0.95,
+      "fragmented_roll_up_potential": 0.45,
+      "founder_led_or_tuck_in": 0.35,
+      "scale_upside": 0.55,
+      "low_integration_complexity": 0.4,
+      "evidence_quality": 0.55,
+      "diligence_questions": [
+        "Confirm current ownership and US revenue mix",
+        "Map overlap with ABC club stack"
+      ],
+      "red_flags": ["Competitive overlap assessment needed"],
+      "evidence": [
+        {
+          "claim": "B2B software for wellness businesses",
+          "source_url": null,
+          "quote": null
+        }
+      ],
+      "raw_notes": "Illustrative frozen row for demo.",
+      "workflow_status": "draft",
+      "analyst_comment": "",
+      "watchlisted": false
+    }
+  ]
+}

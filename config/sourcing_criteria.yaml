@@ -1,0 +1,33 @@
+# ABC Fitness Corp Dev — global early sourcing (multi-region).
+# Weights apply to enrichment scores (0–1 dimensions).
+
+mandate:
+  name: "ABC Fitness — global fitness / wellness / club-tech M&A long-list"
+  geography: "Multi-region (US, EU, India, AUS, LATAM, Japan)"
+  sectors_primary:
+    - boutique_fitness_operator
+    - gym_franchisor
+    - fitness_software
+    - corporate_wellness
+    - recovery_athletic_performance
+  sectors_excluded:
+    - pharma_biotech
+    - hospital_systems
+
+hard_filters:
+  require_us_relevant: false
+  exclude_if_sector_in: ["pharma_biotech", "hospital_systems"]
+
+# Soft scoring: total_score = sum(weight * dimension)
+scoring_weights:
+  strategic_fit_b2b2c_distribution: 0.22
+  software_or_data_component: 0.18
+  fragmented_category_roll_up_potential: 0.15
+  founder_led_or_tuck_in_friendly: 0.12
+  scale_upside_locations_or_seats: 0.13
+  low_integration_complexity_vs_abc: 0.10
+  evidence_quality: 0.10
+
+surface_rules:
+  min_total_score: 0.35
+  min_evidence_quality: 0.25
