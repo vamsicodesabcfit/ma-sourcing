@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -34,6 +35,22 @@ from src.workflow_merge import merge_enrichment_preserving_workflow
 ROOT = Path(__file__).resolve().parent
 CRITERIA_PATH = ROOT / "config" / "sourcing_criteria.yaml"
 DOC_PATH = ROOT / "docs" / "USER_GUIDE.md"
+LOGO_PNG = ROOT / "assets" / "abc_fitness_logo.png"
+LOGO_SVG = ROOT / "assets" / "abc_fitness_logo.svg"
+
+
+def _resolved_brand_logo() -> Optional[Path]:
+    if LOGO_PNG.is_file():
+        return LOGO_PNG
+    if LOGO_SVG.is_file():
+        return LOGO_SVG
+    return None
+
+
+# Workflow Status column: Glide data grid is canvas-based, so we use format_func for a visible ▼ affordance.
+WORKFLOW_STATUS_OPTIONS: Tuple[str, ...] = ("draft", "submitted", "approved", "rejected", "deferred")
+
+
 SCREENSHOTS: Tuple[Tuple[str, str], ...] = (
     ("discover-tab.png", "Discover: strategy, prompt panel (copy icon), paste JSON"),
     ("enrich-tab.png", "Enrich: source list, prompt panel, master table"),
@@ -212,18 +229,70 @@ def _enrichment_results_json_bytes(enriched: List[EnrichedTarget]) -> bytes:
     return json.dumps(payload, indent=2).encode("utf-8")
 
 
+# Pad Status labels with figure spaces so the chevron reads as a right-side affordance (Glide has no split layout).
+_MAX_WORKFLOW_STATUS_LEN = max(len(x) for x in WORKFLOW_STATUS_OPTIONS)
+
+
+def _workflow_status_display(value: object) -> str:
+    """Cell + dropdown label: status text, then chevron toward the right (Streamlit SelectboxColumn format_func)."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        label = "—"
+    else:
+        label = str(value).strip()
+    # +3 breathing room after longest option so short values (e.g. draft) still push ▼ rightward.
+    n_pad = max(1, _MAX_WORKFLOW_STATUS_LEN + 3 - len(label))
+    return label + ("\u2007" * min(n_pad, 18)) + "\u00b7\u200a\u25bc"
+
+
+def _normalize_workflow_status_value(raw: object, fallback: str) -> str:
+    """Map editor output back to a canonical workflow_status (handles decorated labels if needed)."""
+    if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+        return fallback if fallback in WORKFLOW_STATUS_OPTIONS else "draft"
+    s = str(raw).strip()
+    if s in WORKFLOW_STATUS_OPTIONS:
+        return s
+    # Strip padded display from format_func (figure / thin spaces, optional ·, ▼/▾).
+    stripped = re.sub(r"([\u2007\u00a0\u200a]|\s)*(\u00b7[\u200a]*)?[\u25bc\u25be]\s*$", "", s).strip()
+    if stripped in WORKFLOW_STATUS_OPTIONS:
+        return stripped
+    return fallback if fallback in WORKFLOW_STATUS_OPTIONS else "draft"
+
+
 def _apply_workflow_editor(edited_df: pd.DataFrame, enriched: List[EnrichedTarget]) -> List[EnrichedTarget]:
     """Update workflow fields on matching companies (subset or full table)."""
+    if edited_df.empty or "company_name" not in edited_df.columns:
+        return enriched
     by_name = {e.company_name: e for e in enriched}
     for _, row in edited_df.iterrows():
         name = str(row["company_name"])
         e = by_name.get(name)
         if not e:
             continue
-        e.workflow_status = str(row.get("workflow_status", e.workflow_status))
+        e.workflow_status = _normalize_workflow_status_value(
+            row.get("workflow_status"),
+            e.workflow_status,
+        )
         e.analyst_comment = str(row.get("analyst_comment", e.analyst_comment))
         e.watchlisted = bool(row.get("watchlisted", e.watchlisted))
     return enriched
+
+
+def _canonical_workflow_table(df: pd.DataFrame) -> pd.DataFrame:
+    """Coerce types/labels so baseline vs editor compare matches Streamlit/Glide output (avoids spurious autosave)."""
+    d = df.reset_index(drop=True).copy()
+    if d.empty or "company_name" not in d.columns:
+        return d
+    d = d.sort_values("company_name").reset_index(drop=True)
+    if "workflow_status" in d.columns:
+        d["workflow_status"] = [_normalize_workflow_status_value(v, "draft") for v in d["workflow_status"]]
+    if "watchlisted" in d.columns:
+        d["watchlisted"] = d["watchlisted"].fillna(False).astype(bool)
+    if "analyst_comment" in d.columns:
+        d["analyst_comment"] = d["analyst_comment"].fillna("").map(lambda x: str(x))
+    d["company_name"] = d["company_name"].map(lambda x: str(x))
+    if "headquarters" in d.columns:
+        d["headquarters"] = d["headquarters"].fillna("").map(lambda x: str(x))
+    return d
 
 
 def _render_pipeline_mermaid() -> None:
@@ -349,9 +418,12 @@ st.set_page_config(
 )
 
 apply_streamlit_theme()
-render_app_hero()
+render_app_hero(logo_path=_resolved_brand_logo())
 
 with st.sidebar:
+    _logo = _resolved_brand_logo()
+    if _logo is not None:
+        st.image(str(_logo), use_container_width=True)
     st.markdown("#### Workspace")
     _criteria_sb = load_criteria(CRITERIA_PATH)
 
@@ -670,7 +742,39 @@ with tab_wf:
     if "enriched" not in st.session_state or not st.session_state["enriched"]:
         st.info("Complete enrichment on the **Enrich** tab first.")
     else:
-        only_w = st.checkbox("Show watchlisted only", value=False)
+        only_w = st.checkbox(
+            "Show watchlisted only",
+            value=False,
+            key="wf_show_watchlisted_only",
+            help="When turned on, your latest full-table edits are saved first, then only watchlisted rows are shown.",
+        )
+        prev = st.session_state.get("_wf_watchlist_filter_prev")
+        _wf_applied_on_filter = False
+        # Persist edits before changing which rows the grid shows (Streamlit order: checkbox updates before editor).
+        if prev is not None and (not prev) and only_w:
+            snap = st.session_state.get("_wf_editor_full_snapshot")
+            if snap is not None and not snap.empty and "company_name" in snap.columns:
+                st.session_state["enriched"] = _apply_workflow_editor(
+                    _canonical_workflow_table(snap),
+                    st.session_state["enriched"],
+                )
+                _wf_applied_on_filter = True
+        elif prev is not None and prev and (not only_w):
+            snap = st.session_state.get("_wf_last_edited_any")
+            if snap is not None and not snap.empty and "company_name" in snap.columns:
+                st.session_state["enriched"] = _apply_workflow_editor(
+                    _canonical_workflow_table(snap),
+                    st.session_state["enriched"],
+                )
+                _wf_applied_on_filter = True
+        if _wf_applied_on_filter and hasattr(st, "toast"):
+            st.toast("Workflow saved to session.", icon="✅")
+        elif _wf_applied_on_filter:
+            st.markdown(
+                '<p class="abc-wf-autosave-note">Saved to session before updating the table view.</p>',
+                unsafe_allow_html=True,
+            )
+
         base = st.session_state["enriched"]
         if only_w:
             base = [e for e in base if e.watchlisted]
@@ -678,16 +782,20 @@ with tab_wf:
             [
                 {
                     "company_name": e.company_name,
-                    "workflow_status": e.workflow_status,
-                    "analyst_comment": e.analyst_comment,
-                    "watchlisted": e.watchlisted,
                     "headquarters": e.headquarters or e.hq_us_state_or_region,
+                    "workflow_status": e.workflow_status,
+                    "watchlisted": e.watchlisted,
+                    "analyst_comment": e.analyst_comment,
                 }
                 for e in base
             ]
         )
-        st.caption(
-            "Click a cell in **▾ Status** to open the dropdown (draft → submitted → approved / rejected / deferred)."
+        st.markdown(
+            '<p class="abc-wf-table-hint">In <strong>Status</strong>, the label sits on the left and '
+            "<strong>▼</strong> sits toward the right of the same cell (pick list). "
+            "Click the cell to change "
+            "<em>draft → submitted → approved / rejected / deferred</em>.</p>",
+            unsafe_allow_html=True,
         )
         edited = st.data_editor(
             wf_df,
@@ -695,20 +803,38 @@ with tab_wf:
             hide_index=True,
             column_config={
                 "workflow_status": st.column_config.SelectboxColumn(
-                    "▾ Status",
-                    help="Pick workflow state from the list; click the cell to open options.",
-                    options=["draft", "submitted", "approved", "rejected", "deferred"],
+                    "Status",
+                    help="Pick list — click a cell; options use the same label + ▼ pattern.",
+                    options=list(WORKFLOW_STATUS_OPTIONS),
+                    format_func=_workflow_status_display,
                     required=True,
+                    width="large",
                 ),
                 "watchlisted": st.column_config.CheckboxColumn("Watchlist"),
             },
             disabled=["company_name", "headquarters"],
             key="wf_editor",
         )
-        if st.button("Save workflow changes to session", type="secondary", use_container_width=True):
+        st.session_state["_wf_last_edited_any"] = edited.copy()
+        if not only_w:
+            st.session_state["_wf_editor_full_snapshot"] = edited.copy()
+        st.session_state["_wf_watchlist_filter_prev"] = only_w
+
+        if st.button("Save workflow to session", type="primary", use_container_width=True, key="wf_save_explicit"):
             full = st.session_state["enriched"]
-            st.session_state["enriched"] = _apply_workflow_editor(edited, full)
-            st.success("Workflow updated.")
+            st.session_state["enriched"] = _apply_workflow_editor(
+                _canonical_workflow_table(edited),
+                full,
+            )
+            if hasattr(st, "toast"):
+                st.toast("Workflow saved to session.", icon="✅")
+            else:
+                st.success("Workflow saved to session.")
+            st.rerun()
+        st.caption(
+            "Turning **Show watchlisted only** on or off saves pending grid edits first, then refreshes the rows shown. "
+            "You can still use **Save workflow to session** anytime."
+        )
 
         st.markdown("### Session backup (JSON)")
         snap = {

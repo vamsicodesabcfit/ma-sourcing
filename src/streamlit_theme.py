@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import html
+from pathlib import Path
+from typing import Optional
+
 import streamlit as st
 
 # Inspired by modern deal / pipeline tools: airy layout, one strong accent, minimal chrome.
@@ -104,6 +108,33 @@ section[data-testid="stSidebar"] label p {
 
 .abc-hero-inner { position: relative; z-index: 1; }
 
+.abc-hero-top {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem 1.25rem;
+  flex-wrap: wrap;
+}
+
+.abc-hero-brand {
+  flex: 1 1 auto;
+  min-width: min(100%, 17rem);
+}
+
+.abc-hero-logo-wrap {
+  flex: 0 0 auto;
+  align-self: center;
+  opacity: 0.96;
+}
+
+.abc-hero-logo-wrap img {
+  display: block;
+  height: 42px;
+  width: auto;
+  max-width: min(260px, 46vw);
+}
+
 .abc-hero-badge {
   display: inline-block;
   font-size: 0.72rem;
@@ -154,6 +185,25 @@ section[data-testid="stSidebar"] label p {
 }
 
 .abc-pill strong { color: var(--abc-emerald); font-weight: 700; }
+
+/* Workflow tab: explain Status pick-list + faux primary bar (Streamlit autosave; no separate click). */
+.main .abc-wf-table-hint {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--abc-slate);
+  background: rgba(236, 253, 245, 0.88);
+  border: 1px solid rgba(5, 150, 105, 0.24);
+  border-radius: 10px;
+  padding: 0.55rem 0.85rem;
+  margin: 0 0 0.7rem 0;
+}
+
+.main .abc-wf-autosave-note {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #047857;
+  margin: 0.35rem 0 0.5rem 0;
+}
 
 div[data-testid="stTabs"] {
   margin-top: 0.25rem;
@@ -266,6 +316,11 @@ hr {
 }
 
 /* Sidebar: calmer, more breathing room */
+section[data-testid="stSidebar"] [data-testid="stImage"] {
+  padding: 0.15rem 0 0.65rem 0 !important;
+  margin-bottom: 0.15rem !important;
+}
+
 section[data-testid="stSidebar"] > div {
   padding-top: 0.35rem !important;
 }
@@ -327,8 +382,16 @@ def apply_streamlit_theme() -> None:
     st.markdown(f"<style>{ABC_STREAMLIT_CSS}</style>", unsafe_allow_html=True)
 
 
-def render_app_hero() -> None:
-    """Top-of-app hero: ABC Fitness positioning + live session counts."""
+def _brand_logo_data_uri(logo_path: Path) -> str:
+    raw = logo_path.read_bytes()
+    b64 = base64.b64encode(raw).decode("ascii")
+    suf = logo_path.suffix.lower()
+    mime = "image/png" if suf == ".png" else "image/svg+xml" if suf == ".svg" else "application/octet-stream"
+    return f"data:{mime};base64,{b64}"
+
+
+def render_app_hero(logo_path: Optional[Path] = None) -> None:
+    """Top-of-app hero: ABC Fitness positioning + live session counts; optional brand mark (main header)."""
     n_cand = len(st.session_state.get("candidates") or [])
     n_enr = len(st.session_state.get("enriched") or [])
     sub = (
@@ -336,13 +399,29 @@ def render_app_hero() -> None:
         "Default: <strong>Groq (API)</strong> for automatic discovery and enrichment; switch to "
         "<strong>Cursor</strong> for manual prompts and pasted JSON."
     )
+    logo_block = ""
+    if logo_path is not None and logo_path.is_file():
+        try:
+            uri = html.escape(_brand_logo_data_uri(logo_path), quote=True)
+            logo_block = (
+                f'<div class="abc-hero-logo-wrap">'
+                f'<img src="{uri}" alt="AB FITNESS" width="260" height="52" />'
+                f"</div>"
+            )
+        except OSError:
+            logo_block = ""
     st.markdown(
         f"""
 <div class="abc-hero">
   <div class="abc-hero-inner">
-    <div class="abc-hero-badge">ABC Fitness · Corp Dev</div>
-    <h1 class="abc-hero-title">Proactive M&amp;A sourcing</h1>
-    <p class="abc-hero-sub">{sub}</p>
+    <div class="abc-hero-top">
+      <div class="abc-hero-brand">
+        <div class="abc-hero-badge">ABC Fitness · Corp Dev</div>
+        <h1 class="abc-hero-title">Proactive M&amp;A sourcing</h1>
+        <p class="abc-hero-sub">{sub}</p>
+      </div>
+      {logo_block}
+    </div>
     <div class="abc-hero-stats">
       <span class="abc-pill"><strong>{html.escape(str(n_cand))}</strong> in discovery list</span>
       <span class="abc-pill"><strong>{html.escape(str(n_enr))}</strong> enriched targets</span>
