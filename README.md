@@ -2,14 +2,15 @@
 
 Internal tool for **early long-listing**: multi-region mandate, **$10M–$600M** deal band, firmographic enrichment, **weighted scoring**, **analyst workflow**, and **exports**—reducing reactive PitchBook-style browsing for first-pass triage.
 
-## Analysis engine: Cursor (default) or Anthropic
+## Analysis engine: Groq (default), Cursor, Anthropic (coming soon)
 
-There is **no requirement** for `ANTHROPIC_API_KEY`.
+- **Groq (API, default):** same JSON schemas as Cursor mode; the app calls Groq directly—no copy/paste. Set **`MA_GROQ_KEY`** or **`GROQ_API_KEY`** in the environment that launches Streamlit (the UI does not store Groq keys).
+- **Cursor:** generated **Markdown prompts**; run in Cursor with web search, then **paste JSON** back.
+- **Anthropic (Claude):** **not enabled** in this build (org API access pending); UI shows “coming soon.”
 
-- **Cursor (recommended):** the app generates **copy-paste prompts** (with JSON schema + ethics rules). You run them in **Cursor** with web search enabled, then **paste JSON** back into the app.
-- **Anthropic API (optional):** same schemas; set `ANTHROPIC_API_KEY` and choose “Anthropic API” in the sidebar.
+Optional **`TAVILY_API_KEY`** pre-fetches snippets into enrichment prompts (Groq or Cursor).
 
-Optional **`TAVILY_API_KEY`** pre-fetches snippets into enrichment prompts (works with either mode).
+Optional **`GROQ_MODEL`** overrides the default Groq model (`llama-3.3-70b-versatile`).
 
 ## Regions
 
@@ -39,8 +40,8 @@ Main tabs: **Discover** → **Enrich** → **Workflow** → **Export**, plus **D
 
 | Tab | Features |
 |-----|----------|
-| **Discover** | Strategy brief → discovery prompt / API → candidates + suggested searches |
-| **Enrich** | Source list (session or CSV) → enrichment prompt / API → master table + CSV |
+| **Discover** | Strategy brief → discovery prompt / API → candidates + suggested searches; **JSON/CSV download** |
+| **Enrich** | Source list (session or CSV) → enrichment prompt / API → master table; **enrichment JSON + master CSV** |
 | **Workflow** | Status, comments, watchlist editor; session JSON backup/restore |
 | **Export** | Markdown IC pack + full CSV download |
 | **Documentation** | Renders `docs/USER_GUIDE.md` + optional screenshots from `docs/images/` |
@@ -59,8 +60,9 @@ streamlit run streamlit_app.py
 Optional:
 
 ```bash
-export ANTHROPIC_API_KEY=...   # API mode only
+export MA_GROQ_KEY=...         # Groq API mode (or use GROQ_API_KEY)
 export TAVILY_API_KEY=...      # Snippets in prompts
+# export GROQ_MODEL=llama-3.3-70b-versatile   # optional
 ```
 
 **Frozen demo:** enable in sidebar to load `data/demo_frozen.json` without any keys.
@@ -72,8 +74,9 @@ export TAVILY_API_KEY=...      # Snippets in prompts
 | `config/sourcing_criteria.yaml` | Mandate + scoring weights + surface thresholds |
 | `src/constants.py` | Region list, deal bounds |
 | `src/cursor_prompts.py` | Markdown + JSON schema text for Cursor |
-| `src/discovery.py` | Discovery: Anthropic + Cursor parse + prompt builder |
-| `src/enrichment.py` | Enrichment: Anthropic + batch Cursor parse + Tavily |
+| `src/discovery.py` | Discovery: Groq + Cursor parse + prompt builder |
+| `src/enrichment.py` | Enrichment: Groq + Cursor parse + Tavily |
+| `src/groq_client.py` | Groq chat completions → JSON |
 | `src/json_utils.py` | Parse JSON from pasted chat |
 | `src/export_pack.py` | Markdown IC pack |
 | `src/workflow_merge.py` | Preserve workflow on re-import |

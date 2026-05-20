@@ -28,14 +28,17 @@ This document describes the **internal Streamlit application** for early M&A lon
 
 **Purpose:** Help Corp Dev build a **structured, comparable** list of acquisition targets (fitness / wellness / club-tech) with **evidence-backed** fields, **weighted fit scores**, and **analyst workflow**—without requiring paid databases for the first pass.
 
-**Two analysis modes**
+**Analysis modes**
 
 | Mode | When to use | What you do |
 |------|-------------|-------------|
-| **Cursor (paste JSON)** (default) | No `ANTHROPIC_API_KEY` | Generate a prompt → run in **Cursor** (with web) → paste JSON back. |
-| **Anthropic API** | API key configured | Run discovery / enrichment inside the app via Claude. |
+| **Groq (API)** (default) | `MA_GROQ_KEY` or `GROQ_API_KEY` set (or key pasted in sidebar) | **Run discovery (Groq)** / **Enrich all (Groq)** — JSON returns in-app; same schemas as Cursor. |
+| **Cursor (paste JSON)** | Full manual control, air-gapped workflows, or no Groq key | Generate a prompt → run in **Cursor** (with web) → paste JSON back. |
+| **Anthropic (Claude)** | *Coming soon* | Disabled in the sidebar with a **tooltip**; not selectable until org API access is enabled. |
 
-**Optional:** `TAVILY_API_KEY` pulls short web snippets into **enrichment** prompts (both modes).
+**Optional:** `TAVILY_API_KEY` pulls short web snippets into **enrichment** prompts (Groq or Cursor).
+
+While **Groq** is running discovery or enrichment, the app shows a **status panel** (expandable) with short step lines instead of only a spinner — you can follow which company is being enriched.
 
 ---
 
@@ -77,14 +80,14 @@ Corp dev teams rarely start with a clean spreadsheet of targets. They start with
   [ Sidebar: regions, deal band, provider, keys ]
                     |
                     v
-  +----------+   +------------------+   +----------------+
-  | Discover |-->| Paste candidates |-->| Enrich        |
-  | (thesis)|   | JSON (or API)    |   | (firmographics|
-  +----------+   +------------------+   | + scores)     |
-                    |                    +--------+-------+
-                    v                             |
-             +-------------+                      v
-             | Workflow    |<---------------------+
+  +----------+   +---------------------------+   +----------------+
+  | Discover |-->| Groq API or pasted JSON   |-->| Enrich         |
+  | (thesis) |   +---------------------------+   | (firmographics |
+  +----------+                                   |  + scores)     |
+                    |                            +--------+-------+
+                    v                                     |
+             +-------------+                            v
+             | Workflow    |<---------------------------+
              | status/notes|
              +------+------+
                     |
@@ -106,8 +109,9 @@ Corp dev teams rarely start with a clean spreadsheet of targets. They start with
 | **All regions (global)** | When checked, multiselect is disabled. | Prompts say **global** bias; allowed region codes in JSON include **all** supported regions (`US`, `EU`, `India`, `AUS`, `LATAM`, `Japan`). |
 | **Regions (multi-select)** | One or more region codes. | **Target regions** and **Allowed region codes** in generated prompts match this list only. |
 | **Deal size band** (slider, USD millions) | Min–max implied EV / check size. | Injected into prompts so research biases toward companies plausibly in band. Bounds from `src/constants.py` (e.g. **$10M–$600M** max). |
-| **Provider** | Cursor vs Anthropic. | Chooses manual JSON workflow vs in-app API calls. |
-| **Anthropic API key** | Optional secret. | Only if **Anthropic API** is selected. |
+| **Provider** | Groq, Cursor, or **Anthropic** (disabled). | Groq runs in-app; Cursor uses paste JSON; Anthropic shows a **tooltip** (“not available yet”) until org API access exists. |
+| **Groq API key** | Not collected in the UI. | Set **`MA_GROQ_KEY`** or **`GROQ_API_KEY`** in the environment that launches Streamlit. |
+| **Tavily API key** | Optional secret in sidebar. | When set + toggle on, enrichment prompts include **web snippets** for citations. |
 | **Tavily API key** | Optional. | When set + toggle on, enrichment prompts include **web snippets** for citations. |
 | **Frozen demo dataset** | Loads canned JSON. | Skips live API; good for demos and training. |
 | **Mandate (YAML excerpt)** | Read-only `sourcing_criteria.yaml`. | Sector preferences; **geography for the run** comes from sidebar regions. |
@@ -129,7 +133,12 @@ See [§2](#2-why-discover-enrich-and-workflow-exist). Discover produces the **fi
 | **Mandate / thesis** | Free-text strategy: geographies you care about *strategically*, channels (employers, insurers), product angles (SaaS, rollup), what to avoid. | *“Prioritize US + EU boutique operators and gym software with clear B2B2C path into clubs; avoid pure pharma. Tuck-in tech OK under $80M EV.”* |
 | **Max discovery candidates** | Hard cap on how many names the model should return in one JSON response. | Set **15** for a weekly long-list; set **25** for a broader sweep (more noise, more review). |
 
-**Example together:** Mandate as above + **Max 12** + regions **US, EU** + deal **$15M–$80M** tells Cursor/Claude to propose **up to 12** names biased to that story—not 50 random fitness apps.
+**Example together:** Mandate as above + **Max 12** + regions **US, EU** + deal **$15M–$80M** tells the model to propose **up to 12** names biased to that story—not 50 random fitness apps.
+
+### Groq mode (default)
+
+1. Set **`MA_GROQ_KEY`** or **`GROQ_API_KEY`** in the environment (not in the Streamlit UI).
+2. **Run discovery (Groq)** — a **status panel** opens with context while the model runs; then the candidate table fills (demo uses frozen data without calling the API).
 
 ### Cursor mode
 
@@ -139,12 +148,13 @@ See [§2](#2-why-discover-enrich-and-workflow-exist). Discover produces the **fi
 
 ### Anthropic mode
 
-- **Run discovery (Anthropic)** — fills the candidate table (requires key; demo uses frozen data).
+- **Coming soon** — not enabled in this build; use Groq or Cursor.
 
 ### Outputs
 
 - Candidate **table** (name, HQ, `regions_relevant`, website, rationale, etc.).
 - **Suggested searches** (optional) from JSON for analysts to deepen manually.
+- **Download discovery JSON** — same shape as pasted discovery JSON (`candidates` + `search_queries_suggested`); use **Download discovery CSV** for Excel.
 
 ---
 
@@ -172,7 +182,13 @@ See [§2](#2-why-discover-enrich-and-workflow-exist). Enrichment turns **names**
 - **website** — optional but improves research quality.  
 - **notes** — optional; passed into the prompt as analyst hints (e.g. “competes with Mindbody”, “APAC expansion”).
 
-**Example:** You export 8 names from an internal sheet → save as `targets.csv` with columns above → **Upload CSV** → **Generate enrichment prompt** → one batch JSON for all eight.
+**Example:** You export 8 names from an internal sheet → save as `targets.csv` with columns above → **Upload CSV** → run **Enrich all (Groq)** or generate a Cursor batch prompt.
+
+### Groq mode (default)
+
+1. Build a **non-empty** company list (from **Discover** or **Upload CSV**).
+2. Set **`MA_GROQ_KEY`** or **`GROQ_API_KEY`** in the environment.
+3. **Enrich all (Groq)** — the status panel lists each company as it is processed (same schema as Cursor). Rows that fail validation are skipped with a note in the panel.
 
 ### Cursor mode
 
@@ -181,11 +197,12 @@ See [§2](#2-why-discover-enrich-and-workflow-exist). Enrichment turns **names**
 
 ### Anthropic mode
 
-- **Enrich all (Anthropic)** — one API call per company (slower for long lists).
+- **Coming soon** — not enabled; use Groq or Cursor.
 
 ### Outputs
 
-- **Master table** + **Download master CSV**.
+- **Master table** + **Download enrichment JSON** (`enriched_targets` array, re-pasteable into the app) + **Download master CSV** (flat triage table for Excel).
+- If the model returns `evidence` entries as **plain strings** (instead of `{claim, source_url, quote}` objects), the app **normalizes** them into evidence rows so enrichment does not fail mid-batch.
 
 Re-importing enrichment **preserves** workflow fields when `company_name` matches.
 

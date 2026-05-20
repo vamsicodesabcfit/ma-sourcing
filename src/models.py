@@ -131,16 +131,34 @@ def discovery_from_dict(data: dict[str, Any]) -> DiscoveryResult:
     )
 
 
-def enrich_from_dict(row: dict[str, Any]) -> EnrichedTarget:
-    evs = []
-    for e in row.get("evidence") or []:
-        evs.append(
-            EvidenceItem(
-                claim=str(e.get("claim", "")),
-                source_url=e.get("source_url"),
-                quote=e.get("quote"),
+def _evidence_items_from_raw(raw: Any) -> List[EvidenceItem]:
+    """Groq/Cursor sometimes return a string or non-dict list item; normalize to EvidenceItem."""
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        s = raw.strip()
+        return [EvidenceItem(claim=s, source_url=None, quote=None)] if s else []
+    if not isinstance(raw, list):
+        return []
+    out: List[EvidenceItem] = []
+    for e in raw:
+        if isinstance(e, str):
+            s = e.strip()
+            if s:
+                out.append(EvidenceItem(claim=s, source_url=None, quote=None))
+        elif isinstance(e, dict):
+            out.append(
+                EvidenceItem(
+                    claim=str(e.get("claim", "")),
+                    source_url=e.get("source_url"),
+                    quote=e.get("quote"),
+                )
             )
-        )
+    return out
+
+
+def enrich_from_dict(row: dict[str, Any]) -> EnrichedTarget:
+    evs = _evidence_items_from_raw(row.get("evidence"))
     inv = row.get("investors")
     if inv is None:
         investors: List[str] = []

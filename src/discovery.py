@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from src.claude_client import complete_json
+from src.groq_client import complete_json_groq
 from src.criteria import (
     allowed_regions_instruction_line,
     criteria_prompt_block,
@@ -55,14 +56,15 @@ def parse_discovery_pasted_json(text: str) -> DiscoveryResult:
     return discovery_from_dict(data)
 
 
-def run_discovery_anthropic(
+def build_discovery_user_message(
     strategy_brief: str,
     regions: List[str],
     deal_min_m: float,
     deal_max_m: float,
     max_candidates: int = 15,
     criteria_path: Optional[str] = None,
-) -> DiscoveryResult:
+) -> str:
+    """User message shared by Anthropic, Groq, and Cursor prompt builders."""
     criteria = load_criteria(criteria_path)
     block = criteria_prompt_block(criteria)
     rb = regions_block(regions)
@@ -71,7 +73,7 @@ def run_discovery_anthropic(
     allowed_line = allowed_regions_instruction_line(codes)
     rrel_inner = ", ".join(f'"{c}"' for c in codes)
 
-    user = f"""{block}
+    return f"""{block}
 {rb}
 {db}
 {allowed_line}
@@ -104,7 +106,34 @@ Return JSON:
 Up to {max_candidates} candidates. Bias to regions and ~${deal_min_m:.0f}M–${deal_max_m:.0f}M where plausible.
 """
 
+
+def run_discovery_anthropic(
+    strategy_brief: str,
+    regions: List[str],
+    deal_min_m: float,
+    deal_max_m: float,
+    max_candidates: int = 15,
+    criteria_path: Optional[str] = None,
+) -> DiscoveryResult:
+    user = build_discovery_user_message(
+        strategy_brief, regions, deal_min_m, deal_max_m, max_candidates, criteria_path
+    )
     data = complete_json(DISCOVERY_SYSTEM, user)
+    return discovery_from_dict(data)
+
+
+def run_discovery_groq(
+    strategy_brief: str,
+    regions: List[str],
+    deal_min_m: float,
+    deal_max_m: float,
+    max_candidates: int = 15,
+    criteria_path: Optional[str] = None,
+) -> DiscoveryResult:
+    user = build_discovery_user_message(
+        strategy_brief, regions, deal_min_m, deal_max_m, max_candidates, criteria_path
+    )
+    data = complete_json_groq(DISCOVERY_SYSTEM, user)
     return discovery_from_dict(data)
 
 
